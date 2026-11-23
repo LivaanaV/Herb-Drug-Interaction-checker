@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Herb-Drug Interaction Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=IBM+Plex+Sans:wght@400;450;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a clinical instrument — fixed query rail, scrolling evidence panel. */
+:root{
+  --bg:#f4f6f4; --surface:#ffffff; --surface-2:#eef1ee; --line:#dde3dd; --line-2:#c7d1c8;
+  --ink:#141c17; --ink-2:#4a564d; --ink-3:#78857a;
+  --accent:#0d6b58; --accent-ink:#0a4f41; --accent-soft:#e0efe9;
+  --major:#9f2d1b; --major-soft:#f8e4e0;
+  --moderate:#8a5a06; --moderate-soft:#fbeedb;
+  --minor:#4a564d; --minor-soft:#e9ede9;
+  --none:#1f6b47; --none-soft:#e2f0e8;
+  --hypo:#4e3f8c; --hypo-soft:#eae6f7;
+  --font-display:'Newsreader',Georgia,serif;
+  --font-body:'IBM Plex Sans',system-ui,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0d1210; --surface:#141b18; --surface-2:#1a2320; --line:#263230; --line-2:#36453f;
+    --ink:#e7ede9; --ink-2:#a3b1a8; --ink-3:#73827a;
+    --accent:#4dbba0; --accent-ink:#8fd9c6; --accent-soft:#143029;
+    --major:#ef8572; --major-soft:#3a1f1a;
+    --moderate:#dfa94c; --moderate-soft:#352a16;
+    --minor:#a3b1a8; --minor-soft:#1f2927;
+    --none:#5cc492; --none-soft:#132d22;
+    --hypo:#a797ec; --hypo-soft:#231d3c;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0d1210; --surface:#141b18; --surface-2:#1a2320; --line:#263230; --line-2:#36453f;
+  --ink:#e7ede9; --ink-2:#a3b1a8; --ink-3:#73827a;
+  --accent:#4dbba0; --accent-ink:#8fd9c6; --accent-soft:#143029;
+  --major:#ef8572; --major-soft:#3a1f1a;
+  --moderate:#dfa94c; --moderate-soft:#352a16;
+  --minor:#a3b1a8; --minor-soft:#1f2927;
+  --none:#5cc492; --none-soft:#132d22;
+  --hypo:#a797ec; --hypo-soft:#231d3c;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{background:var(--bg);color:var(--ink);font-family:var(--font-body);font-size:15px;line-height:1.55;-webkit-font-smoothing:antialiased}
+h1,h2,h3{font-family:var(--font-display);font-weight:500;text-wrap:balance;margin:0}
+a{color:var(--accent-ink)}
+.mono{font-family:var(--font-mono);font-variant-numeric:tabular-nums}
+.wrap{max-width:1180px;margin:0 auto;padding:0 20px}
+
+/* header */
+header{border-bottom:1px solid var(--line);background:var(--surface)}
+.head{display:flex;flex-wrap:wrap;gap:14px;align-items:baseline;padding:20px 0 16px}
+.head h1{font-size:27px;letter-spacing:-.01em}
+.head .sub{color:var(--ink-2);font-size:14px;flex:1 1 260px;min-width:0}
+.vchips{display:flex;gap:6px;flex-wrap:wrap}
+.vchip{font-family:var(--font-mono);font-size:11px;letter-spacing:.02em;padding:3px 7px;border:1px solid var(--line-2);border-radius:4px;color:var(--ink-2)}
+
+/* disclaimer */
+.notice{background:var(--moderate-soft);border-bottom:1px solid var(--line);color:var(--ink);font-size:13.5px}
+.notice .wrap{padding:10px 20px;display:flex;gap:10px;align-items:flex-start}
+.notice b{font-weight:600}
+
+/* tabs */
+nav.tabs{border-bottom:1px solid var(--line);background:var(--surface);position:sticky;top:0;z-index:5}
+nav.tabs .wrap{display:flex;gap:2px;overflow-x:auto}
+nav.tabs button{appearance:none;background:none;border:0;border-bottom:2px solid transparent;color:var(--ink-2);
+  font-family:var(--font-body);font-size:14px;font-weight:500;padding:11px 14px;cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--accent)}
+nav.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+
+main{padding:22px 0 64px}
+.cols{display:grid;grid-template-columns:330px minmax(0,1fr);gap:22px;align-items:start}
+.cols>*{min-width:0}
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px}
+.card>.pad{padding:16px}
+.card h2{font-size:17px;margin-bottom:3px}
+.card .hint{color:var(--ink-3);font-size:12.5px;margin:0 0 14px}
+
+/* query rail */
+.rail{position:sticky;top:60px}
+@media (max-width:860px){.rail{position:static}}
+label.fl{display:block;font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-3);margin:0 0 5px}
+select,input[type=number]{width:100%;font-family:var(--font-body);font-size:14px;padding:8px 10px;color:var(--ink);
+  background:var(--surface-2);border:1px solid var(--line-2);border-radius:6px}
+input[type=number]{font-family:var(--font-mono)}
+select:focus-visible,input:focus-visible,button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.field{margin-bottom:14px}
+.prepmeta{font-size:12.5px;color:var(--ink-3);margin-top:6px;line-height:1.45}
+.btn{width:100%;appearance:none;border:1px solid var(--accent);background:var(--accent);color:#fff;
+  font-family:var(--font-body);font-size:14.5px;font-weight:600;padding:10px;border-radius:6px;cursor:pointer}
+:root[data-theme="dark"] .btn,:root:not([data-theme="light"]) .btn{color:#06201a}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .btn{color:#fff}}
+.btn:hover{filter:brightness(1.07)}
+.examples{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.examples p{margin:0 0 7px;font-size:12px;font-weight:600;letter-spacing:.03em;text-transform:uppercase;color:var(--ink-3)}
+.exlink{display:block;width:100%;text-align:left;background:none;border:0;padding:4px 0;cursor:pointer;
+  color:var(--accent-ink);font-family:var(--font-body);font-size:13px;line-height:1.4}
+.exlink:hover{text-decoration:underline}
+
+/* verdict */
+.verdict{display:flex;gap:0;overflow:hidden}
+.stripe{width:6px;flex:0 0 6px}
+.verdict .body{padding:18px;flex:1;min-width:0}
+.vhead{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+.badge{font-size:11.5px;font-weight:600;letter-spacing:.05em;text-transform:uppercase;padding:4px 9px;border-radius:999px}
+.ratio{display:flex;flex-wrap:wrap;align-items:baseline;gap:12px;margin:4px 0 8px}
+.ratio .num{font-family:var(--font-mono);font-size:40px;font-weight:600;letter-spacing:-.02em;line-height:1}
+.ratio .lab{font-size:13px;color:var(--ink-2);max-width:40ch}
+.plain{font-size:15.5px;margin:10px 0 0;color:var(--ink)}
+.interval{font-family:var(--font-mono);font-size:12.5px;color:var(--ink-3)}
+
+.flag{display:flex;gap:9px;align-items:flex-start;padding:11px 13px;border-radius:7px;font-size:13.5px;margin-top:14px}
+.flag.warn{background:var(--moderate-soft);color:var(--ink)}
+.flag.info{background:var(--surface-2);color:var(--ink-2)}
+.flag .k{font-weight:600;color:var(--ink)}
+
+section.blk{margin-top:18px}
+section.blk>h3{font-size:16px;margin-bottom:2px}
+section.blk>.sh{color:var(--ink-3);font-size:12.5px;margin:0 0 11px}
+
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-weight:600;font-size:11.5px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-3);
+  border-bottom:1px solid var(--line-2);padding:7px 9px;white-space:nowrap}
+td{border-bottom:1px solid var(--line);padding:7px 9px;vertical-align:top}
+tbody tr:last-child td{border-bottom:0}
+td.n,th.n{text-align:right;font-family:var(--font-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.scroll{overflow-x:auto}
+.src{font-size:10.5px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;padding:2px 5px;border-radius:3px;white-space:nowrap}
+.src.illustrative{background:var(--moderate-soft);color:var(--moderate)}
+.src.consensus{background:var(--surface-2);color:var(--ink-2)}
+.src.trial{background:var(--none-soft);color:var(--none)}
+.src.sourced{background:var(--none-soft);color:var(--none)}
+.src a{color:inherit;text-decoration:none;border-bottom:1px dotted currentColor}
+
+.chain{width:100%;height:auto;display:block}
+details{border:1px solid var(--line);border-radius:8px;background:var(--surface);margin-top:10px}
+details>summary{cursor:pointer;padding:10px 14px;font-size:13.5px;font-weight:500;list-style:none}
+details>summary::-webkit-details-marker{display:none}
+details>summary::before{content:'▸ ';color:var(--ink-3)}
+details[open]>summary::before{content:'▾ '}
+details .inner{padding:0 14px 14px}
+pre{font-family:var(--font-mono);font-size:11.5px;line-height:1.5;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:6px;padding:12px;overflow-x:auto;margin:0}
+.copy{appearance:none;border:1px solid var(--line-2);background:var(--surface);color:var(--ink-2);
+  font-family:var(--font-body);font-size:12px;padding:5px 10px;border-radius:5px;cursor:pointer;margin-bottom:8px}
+
+.prose{max-width:68ch}
+.prose h2{font-size:21px;margin:26px 0 6px}
+.prose h3{font-size:16px;margin:20px 0 4px}
+.prose p{margin:0 0 11px;color:var(--ink-2)}
+.prose li{color:var(--ink-2);margin-bottom:5px}
+.prose code{font-family:var(--font-mono);font-size:12.5px;background:var(--surface-2);padding:1px 4px;border-radius:3px;color:var(--ink)}
+.eq{font-family:var(--font-mono);font-size:13px;background:var(--surface-2);border:1px solid var(--line);
+  border-radius:6px;padding:12px 14px;margin:0 0 12px;overflow-x:auto;color:var(--ink)}
+.ds-grid{display:grid;gap:16px}
+.hidden{display:none}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap head">
+    <h1>Herb-Drug Interaction Checker</h1>
+    <div class="sub">Mechanism-transparent pharmacokinetic screening for South Asian medicinal plants. Every prediction resolves to a chain of preparation, constituent, protein and drug moiety.</div>
+    <div class="vchips">
+      <span class="vchip" id="chip-engine">engine —</span>
+      <span class="vchip" id="chip-data">data —</span>
+      <span class="vchip">FDA 2020 / ICH M12 static models</span>
+    </div>
+  </div>
+</header>
+
+<div class="notice"><div class="wrap">
+  <span><b>Not clinical advice.</b> This is a research screening tool. It predicts exposure ratios under static-model assumptions, not clinical outcomes. The seed dataset ships with placeholder kinetic values marked <span class="src illustrative">illustrative</span> — curate them against primary literature before drawing any conclusion.</span>
+</div></div>
+
+<nav class="tabs"><div class="wrap">
+  <button id="t-predict" aria-selected="true">Predict</button>
+  <button id="t-data" aria-selected="false">Dataset</button>
+  <button id="t-method" aria-selected="false">Method</button>
+</div></nav>
+
+<main><div class="wrap">
+
+<!-- ================= PREDICT ================= -->
+<div id="v-predict">
+<div class="cols">
+  <div class="rail">
+    <div class="card"><div class="pad">
+      <h2>Query</h2>
+      <p class="hint">A preparation, not a species: plant part and extract type decide the chemistry.</p>
+
+      <div class="field">
+        <label class="fl" for="sel-prep">Herb preparation</label>
+        <select id="sel-prep"></select>
+        <div class="prepmeta" id="prep-meta"></div>
+      </div>
+
+      <div class="field">
+        <label class="fl" for="in-dose">Daily dose of preparation (mg)</label>
+        <input type="number" id="in-dose" min="1" max="20000" step="10">
+      </div>
+
+      <div class="field">
+        <label class="fl" for="sel-drug">Prescription drug</label>
+        <select id="sel-drug"></select>
+        <div class="prepmeta" id="drug-meta"></div>
+      </div>
+
+      <button class="btn" id="btn-run">Run prediction</button>
+
+      <div class="examples">
+        <p>Worked examples</p>
+        <button class="exlink" data-p="turmeric-std" data-d="tacrolimus">Turmeric extract + tacrolimus — intestinal inhibition of a low-F<sub>g</sub> drug</button>
+        <button class="exlink" data-p="stjohnswort-std" data-d="cyclosporine">St John's wort + cyclosporine — induction, loss of exposure</button>
+        <button class="exlink" data-p="turmeric-std" data-d="digoxin">Turmeric + digoxin — transporter co-signal, no ratio</button>
+        <button class="exlink" data-p="ginger-rhizome" data-d="tolbutamide">Ginger + tolbutamide — tier C, gut only</button>
+        <button class="exlink" data-p="turmeric-std" data-d="metformin">Turmeric + metformin — negative control</button>
+        <button class="exlink" data-p="ashwagandha-root" data-d="alprazolam">Ashwagandha + alprazolam — thin evidence</button>
+      </div>
+    </div></div>
+  </div>
+
+  <div id="out"></div>
+</div>
+</div>
+
+<!-- ================= DATASET ================= -->
+<div id="v-data" class="hidden">
+  <div class="ds-grid"><div id="upstream"></div></div>
+  <div class="ds-grid" id="ds"></div>
+</div>
+
+<!-- ================= METHOD ================= -->
+<div id="v-method" class="hidden">
+<div class="prose">
+  <h2>How a prediction is produced</h2>
+  <p>The engine applies the two static models named in the FDA 2020 drug interaction guidance and ICH M12: a basic screen that discards most candidate edges cheaply, then a mechanistic static model that returns a predicted exposure ratio. Potency alone never decides anything.</p>
+
+  <h3>1 · Entity resolution</h3>
+  <p>The query entity is a preparation — species, plant part, extract type and daily dose — because root and leaf of one species are different chemical inputs. Drugs resolve to moieties, so S-warfarin and R-warfarin are scored separately against their own clearance routes.</p>
+
+  <h3>2 · The abundance gate</h3>
+  <p>A constituent enters the arithmetic only if it has a quantified abundance in that plant part and preparation, or is a pharmacopoeial marker constituent. Everything else is counted and listed but never scored. Without this gate, a species with hundreds of catalogued compounds eventually flags on CYP3A4 no matter what it contains.</p>
+
+  <h3>3 · Exposure tiering</h3>
+  <p>Gut lumen concentration needs only the dose and the weight fraction, using the 250 mL convention:</p>
+  <div class="eq">[I]gut = (D_preparation × w_constituent) / (250 mL × MW)</div>
+  <p>Hepatic inlet unbound concentration needs systemic pharmacokinetics, which for most phytochemicals does not exist:</p>
+  <div class="eq">[I]h,u = fu,p × ( Cmax + (Fa · Fg · ka · D) / (Qh · RB) )</div>
+  <ul>
+    <li><b>Tier A</b> — human Cmax and a curated absorbed fraction. Point estimate, both compartments.</li>
+    <li><b>Tier B</b> — Cmax known, absorption unknown. An interval between systemic unbound and a fully-absorbed inlet bound. Severity from the worst end, confidence from the width.</li>
+    <li><b>Tier C</b> — dose and abundance only. Intestinal terms compute; hepatic terms are suppressed, not guessed.</li>
+    <li><b>Tier D</b> — nothing to anchor on. No ratio, no severity. The causal chain is shown as a hypothesis.</li>
+  </ul>
+
+  <h3>4 · Typed bioactivity</h3>
+  <p>Three separate edge types, because they need different parameters and behave differently: reversible inhibition (K<sub>i</sub>), time-dependent inactivation (K<sub>I</sub> and k<sub>inact</sub>) and induction (E<sub>max</sub> and EC<sub>50</sub>). Duplicate assays are resolved before summation, never added twice.</p>
+
+  <h3>5 · Basic static screen</h3>
+  <div class="eq">R1 = 1 + [I]u / Ki        R1,gut = 1 + [I]gut / Ki        R3 = 1 / (1 + d·Emax·[I] / (EC50 + [I]))</div>
+  <p>An edge proceeds at R1 ≥ 1.02 hepatic, R1,gut ≥ 11 intestinal, or R3 ≤ 0.8 for induction. These are the guideline cut-offs, so the screen is citable rather than invented.</p>
+
+  <h3>6 · Mechanistic static model</h3>
+  <div class="eq">AUCR = 1 / ( [Ag·Bg·Cg·(1 − Fg) + Fg] × Π_enzymes [Ah·Bh·Ch·fm + (1 − fm)] )</div>
+  <div class="eq">A = 1 / (1 + Σ [I]/Ki)     B = kdeg / (kdeg + Σ kinact·[I]/(KI + [I]))     C = 1 + d·Emax·[I]/(EC50 + [I])</div>
+  <p>Reversible inhibition is summed across constituents because competitive inhibition at a shared site is additive. Inactivation sums at the level of rate. Induction is deliberately not summed — co-induction is not reliably additive, and pretending otherwise would repeat the error this model exists to fix.</p>
+  <p>For a prodrug the engine reports an activation ratio instead, since the hazard is too little active drug:</p>
+  <div class="eq">AMR = Σ_e ( Ah·Bh·Ch · f_act,e ) + ( 1 − Σ_e f_act,e )</div>
+
+  <h3>7 · Severity and confidence</h3>
+  <p>Severity comes from the predicted ratio and the drug's graded therapeutic index. Confidence comes from the evidence behind that ratio. They are separate axes and either can be low while the other is high.</p>
+  <table>
+    <thead><tr><th>Severity</th><th>Condition</th></tr></thead>
+    <tbody>
+      <tr><td>MAJOR</td><td>AUCR ≥ 2 on an NTI drug, AUCR ≥ 5 on any drug, or activation ratio ≤ 0.5 where loss of effect is itself dangerous</td></tr>
+      <tr><td>MODERATE</td><td>AUCR 1.25–2 on an NTI drug, AUCR 2–5 otherwise, or 0.2–0.5 on a non-critical drug</td></tr>
+      <tr><td>MINOR</td><td>AUCR 1.25–2 on a non-NTI drug, or 0.5–0.8 on a non-critical drug</td></tr>
+      <tr><td>NONE</td><td>AUCR between 0.8 and 1.25, the guideline no-effect boundary</td></tr>
+    </tbody>
+  </table>
+  <p style="margin-top:12px">Three confidence caps are structural rather than data-dependent. Transporter-mediated signals cap at LOW, because in vitro efflux and uptake inhibition translate poorly to clinical exposure. Prodrug predictions cap at MODERATE, because static models cannot represent formation-rate-limited metabolite kinetics. Any prediction touching a placeholder parameter caps at LOW and is marked provisional.</p>
+
+  <h3>What this engine does not do</h3>
+  <p>Transporter edges are reported as co-signals and are never folded into the ratio. Pharmacodynamic interactions are out of scope entirely — the output quantity is an exposure ratio, which has no pharmacodynamic analogue. Genotype, pregnancy, paediatric and organ-impairment adjustments are not modelled, and absorption-enhancing matrix effects are not represented. Polyherbal formulations resolve one preparation at a time.</p>
+
+  <h3>Reproducibility</h3>
+  <p>Every scored result carries an audit record containing the engine version, the data version, the full parameter set and the physiological constants. Re-running that record reproduces the number exactly. Without it, calling the pipeline deterministic would be unverifiable.</p>
+</div>
+</div>
+
+</div></main>
+
+<script src="data.js"></script>
+<script src="engine.js"></script>
+<script>
+(function(){
+  'use strict';
+  var D = window.HDI_DATA, E = window.HDI_ENGINE;
+  var $ = function(id){ return document.getElementById(id); };
+
+  $('chip-engine').textContent = 'engine ' + E.ENGINE_VERSION;
+  $('chip-data').textContent = 'data ' + D.version;
+
+  // ---------- formatting helpers
+  function fmt(n, p){ if(n===null||n===undefined||!isFinite(n)) return '—';
+    if(n!==0 && Math.abs(n)<0.001) return n.toExponential(2);
+    if(Math.abs(n)>=10000) return n.toExponential(2);
+    return Number(n.toPrecision(p||3)).toString(); }
+  function esc(s){ return String(s).replace(/[&<>"]/g, function(c){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'})[c]; }); }
+  function srcTag(s){ return '<span class="src '+esc(s)+'">'+esc(s)+'</span>'; }
+  function srcCell(r){
+    if (r.pmid) return '<span class="src sourced"><a href="https://pubmed.ncbi.nlm.nih.gov/'+esc(r.pmid)+
+      '/" target="_blank" rel="noopener">PMID '+esc(r.pmid)+'</a></span>';
+    return srcTag(r.src);
+  }
+  var SEV = { MAJOR:'major', MODERATE:'moderate', MINOR:'minor', NONE:'none', INDETERMINATE:'indeterminate' };
+  function sevStyle(sev){ var k = SEV[sev]||'minor';
+    return 'background:var(--'+k+'-soft);color:var(--'+k+')'; }
+
+  // ---------- populate controls
+  var selPrep = $('sel-prep'), selDrug = $('sel-drug'), inDose = $('in-dose');
+  var bySpecies = {};
+  D.PREPARATIONS.forEach(function(p){ (bySpecies[p.species] = bySpecies[p.species] || []).push(p); });
+  Object.keys(bySpecies).sort().forEach(function(sp){
+    var g = document.createElement('optgroup');
+    g.label = sp + ' — ' + bySpecies[sp][0].common;
+    bySpecies[sp].forEach(function(p){
+      var o = document.createElement('option');
+      o.value = p.id; o.textContent = p.part + ', ' + p.prep;
+      g.appendChild(o);
+    });
+    selPrep.appendChild(g);
+  });
+  D.DRUGS.slice().sort(function(a,b){ return a.inn.localeCompare(b.inn); }).forEach(function(d){
+    var o = document.createElement('option');
+    o.value = d.id; o.textContent = d.inn + (d.brands && d.brands.length ? '  (' + d.brands[0] + ')' : '');
+    selDrug.appendChild(o);
+  });
+
+  function prepById(id){ return D.PREPARATIONS.filter(function(p){ return p.id===id; })[0]; }
+  function drugById(id){ return D.DRUGS.filter(function(d){ return d.id===id; })[0]; }
+
+  function syncPrepMeta(){
+    var p = prepById(selPrep.value);
+    inDose.value = p.dose;
+    $('prep-meta').innerHTML = '<i>' + esc(p.species) + '</i> · ' + esc(p.vernacular) +
+      ' · ' + p.constituents.length + ' constituent' + (p.constituents.length>1?'s':'') +
+      ' on file · default dose ' + srcTag(p.doseSrc);
+  }
+  function syncDrugMeta(){
+    var d = drugById(selDrug.value);
+    var m = d.moieties[0];
+    var bits = [];
+    if (d.moieties.length > 1) bits.push(d.moieties.length + ' moieties');
+    if (m.nti) bits.push('NTI ' + m.nti.grade + ', threshold ' + m.nti.threshold + '×');
+    if (d.isProdrug) bits.push('prodrug');
+    $('drug-meta').innerHTML = esc(d.note) + (bits.length ? '<br>' + esc(bits.join(' · ')) : '') +
+      (d.brands && d.brands.length>1 ? '<br>India: ' + esc(d.brands.join(', ')) : '');
+  }
+  selPrep.addEventListener('change', function(){ syncPrepMeta(); run(); });
+  selDrug.addEventListener('change', function(){ syncDrugMeta(); run(); });
+  inDose.addEventListener('change', run);
+  $('btn-run').addEventListener('click', run);
+  Array.prototype.forEach.call(document.querySelectorAll('.exlink'), function(b){
+    b.addEventListener('click', function(){
+      selPrep.value = b.dataset.p; syncPrepMeta();
+      selDrug.value = b.dataset.d; syncDrugMeta();
+      run();
+      $('out').scrollIntoView({ behavior:'smooth', block:'start' });
+    });
+  });
+
+  // ---------- causal chain drawing
+  function chain(res){
+    var W = 860, colW = 176, gap = (W - 4*colW) / 3, rowH = 40;
+    var cols = [[],[],[],[]];
+    cols[0] = [{ t: res.prep.common, s: res.prep.part + ', ' + res.prep.prep }];
+
+    var contributors = [];
+    if (res.outcome === 'scored') {
+      var seen = {};
+      res.governing.detailHigh.detail.hepatic.forEach(function(h){
+        h.terms.used.forEach(function(u){ seen[u.cid] = Math.max(seen[u.cid]||0, u.ratio); }); });
+      if (res.governing.detailHigh.detail.gut)
+        res.governing.detailHigh.detail.gut.terms.used.forEach(function(u){ seen[u.cid] = Math.max(seen[u.cid]||0, u.ratio); });
+      contributors = Object.keys(seen).sort(function(a,b){ return seen[b]-seen[a]; }).slice(0,3);
+    }
+    if (!contributors.length) contributors = (res.contributing||res.exposures||[]).slice(0,3).map(function(e){ return e.cid; });
+    cols[1] = contributors.map(function(cid){
+      var ex = (res.exposures||[]).filter(function(e){ return e.cid===cid; })[0];
+      return { t: D.CONSTITUENTS[cid].name, s: ex ? 'tier ' + ex.tier : '' };
+    });
+    if (!cols[1].length) cols[1] = [{ t: 'no gated constituent', s: '' }];
+
+    var prots = {};
+    if (res.outcome === 'scored') {
+      res.governing.detailHigh.detail.hepatic.forEach(function(h){
+        if (h.terms.used.length) prots[h.protein] = 'f' + 'm' + ' ' + h.fm; });
+      var g = res.governing.detailHigh.detail.gut;
+      if (g && g.terms.used.length) prots[g.protein] = 'F' + 'g' + ' ' + g.fg;
+    }
+    (res.transporterSignals||[]).forEach(function(t){ prots[t.protein] = 'co-signal'; });
+    cols[2] = Object.keys(prots).slice(0,4).map(function(pid){
+      return { t: D.PROTEINS[pid].symbol, s: D.PROTEINS[pid].organ + ' · ' + prots[pid] };
+    });
+    if (!cols[2].length) cols[2] = [{ t: 'no shared protein', s: '' }];
+
+    var mo = res.outcome === 'scored' ? res.governing.moiety : res.drug.moieties[0];
+    cols[3] = [{ t: res.drug.inn, s: mo.name !== res.drug.inn.toLowerCase() ? mo.name : '' }];
+
+    var rows = Math.max(cols[0].length, cols[1].length, cols[2].length, cols[3].length);
+    var H = 34 + rows*rowH + 16;
+    var x = function(i){ return i*(colW+gap); };
+    var y = function(i, n){ var block = n*rowH; var start = 34 + (rows*rowH - block)/2; return start + i*rowH; };
+
+    var s = '<svg class="chain" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Causal chain from preparation to drug">';
+    s += '<defs><marker id="ch-ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">'+
+         '<path d="M0 0L10 5L0 10z" fill="var(--line-2)"/></marker></defs>';
+    ['Preparation','Constituents','Protein · organ','Drug moiety'].forEach(function(h,i){
+      s += '<text x="'+x(i)+'" y="14" font-size="10.5" font-family="IBM Plex Sans" font-weight="600" fill="var(--ink-3)" letter-spacing="0.6">'+h.toUpperCase()+'</text>';
+    });
+    for (var c=0;c<3;c++){
+      for (var a=0;a<cols[c].length;a++) for (var b=0;b<cols[c+1].length;b++){
+        var y1 = y(a,cols[c].length)+17, y2 = y(b,cols[c+1].length)+17;
+        var x1 = x(c)+colW, x2 = x(c+1);
+        s += '<path d="M'+x1+' '+y1+'C'+(x1+gap*0.5)+' '+y1+' '+(x2-gap*0.5)+' '+y2+' '+x2+' '+y2+
+             '" fill="none" stroke="var(--line-2)" stroke-width="1" marker-end="url(#ch-ar)"/>';
+      }
+    }
+    for (var ci=0;ci<4;ci++) cols[ci].forEach(function(node, ri, arr){
+      var yy = y(ri, arr.length);
+      s += '<rect x="'+x(ci)+'" y="'+yy+'" width="'+colW+'" height="34" rx="6" fill="var(--surface-2)" stroke="var(--line-2)" stroke-width="1"/>';
+      s += '<text x="'+(x(ci)+10)+'" y="'+(yy+14)+'" font-size="12" font-family="IBM Plex Sans" font-weight="600" fill="var(--ink)">'+esc(node.t.length>24?node.t.slice(0,23)+'…':node.t)+'</text>';
+      if (node.s) s += '<text x="'+(x(ci)+10)+'" y="'+(yy+27)+'" font-size="10.5" font-family="IBM Plex Mono" fill="var(--ink-3)">'+esc(node.s.length>26?node.s.slice(0,25)+'…':node.s)+'</text>';
+    });
+    return s + '</svg>';
+  }
+
+  // ---------- render
+  function run(){
+    var res;
+    try { res = E.predict(D, selPrep.value, selDrug.value, { dose: Number(inDose.value) }); }
+    catch(err){ $('out').innerHTML = '<div class="card"><div class="pad">Could not run: '+esc(err.message)+'</div></div>'; return; }
+    $('out').innerHTML = render(res);
+    var cp = document.querySelector('#out .copy');
+    if (cp) cp.addEventListener('click', function(){
+      navigator.clipboard.writeText(JSON.stringify(res.audit, null, 2))
+        .then(function(){ cp.textContent = 'Copied'; setTimeout(function(){ cp.textContent='Copy audit record'; },1600); })
+        .catch(function(){ cp.textContent = 'Select the text below to copy'; });
+    });
+  }
+
+  function render(res){
+    var h = '';
+    var stripeColor, badge, title, bigNum, bigLab, plain;
+
+    if (res.outcome === 'no-pathway'){
+      stripeColor = 'var(--none)'; badge = 'NO PATHWAY';
+      bigNum = '—'; bigLab = 'no exposure ratio, because no modelled route connects them';
+      plain = res.message;
+    } else if (res.outcome === 'hypothesis'){
+      stripeColor = 'var(--hypo)'; badge = 'NOT A PREDICTION';
+      bigNum = '—'; bigLab = 'exposure unanchored, so the engine declines to score';
+      plain = res.message;
+    } else {
+      var g = res.governing;
+      stripeColor = 'var(--'+(SEV[g.severity]||'minor')+')';
+      badge = g.severity;
+      bigNum = fmt(g.ratio, 3) + '×';
+      bigLab = (g.kind === 'AMR' ? 'predicted active-metabolite ratio' : 'predicted AUC ratio') +
+               ' for ' + g.moiety.name;
+      plain = plainSentence(res);
+    }
+
+    h += '<div class="card verdict"><div class="stripe" style="background:'+stripeColor+'"></div><div class="body">';
+    h += '<div class="vhead">';
+    h += '<span class="badge" style="'+(res.outcome==='scored'?sevStyle(res.governing.severity):'background:var(--hypo-soft);color:var(--hypo)')+'">'+esc(badge)+'</span>';
+    if (res.outcome === 'scored')
+      h += '<span class="badge" style="background:var(--surface-2);color:var(--ink-2)">confidence '+esc(res.confidence.level)+'</span>';
+    if (res.tier)
+      h += '<span class="badge" style="background:var(--surface-2);color:var(--ink-2)">exposure tier '+esc(res.tier)+'</span>';
+    if (res.provisional)
+      h += '<span class="badge" style="background:var(--moderate-soft);color:var(--moderate)">provisional data</span>';
+    h += '</div>';
+
+    h += '<div class="ratio"><span class="num" style="color:'+stripeColor+'">'+esc(bigNum)+'</span><span class="lab">'+esc(bigLab)+'</span></div>';
+    if (res.outcome === 'scored' && !res.governing.pointEstimate){
+      var iv = res.governing.interval;
+      h += '<div class="interval">interval '+fmt(iv[0],3)+'× to '+fmt(iv[1],3)+'× — severity taken from the worse end, confidence from the width</div>';
+    }
+    h += '<p class="plain">'+esc(plain)+'</p>';
+
+    if (res.outcome === 'scored' && res.confidence.caps.length){
+      res.confidence.caps.forEach(function(c){
+        h += '<div class="flag warn"><span><span class="k">Confidence capped.</span> '+esc(c)+'</span></div>'; });
+    }
+    if (res.tier === 'C')
+      h += '<div class="flag info"><span><span class="k">Intestinal only.</span> No constituent here has systemic pharmacokinetics on file, so hepatic terms were suppressed rather than estimated. A hepatic interaction is not excluded; it is unevaluated.</span></div>';
+    h += '</div></div>';
+
+    // chain
+    h += '<section class="blk"><h3>Causal chain</h3><p class="sh">Each link is a stored record with its own provenance.</p>'+
+         '<div class="card"><div class="pad scroll">'+chain(res)+'</div></div></section>';
+
+    if (res.outcome === 'scored'){
+      h += modelBlock(res);
+      h += contributionBlock(res);
+    }
+    h += exposureBlock(res);
+    if ((res.transporterSignals||[]).length) h += transporterBlock(res);
+    h += missingBlock(res);
+    h += gateBlock(res);
+    h += auditBlock(res);
+    return h;
+  }
+
+  function plainSentence(res){
+    var g = res.governing, d = res.drug, dn = d.inn.toLowerCase();
+    var where = [];
+    if (g.detailHigh.detail.gut && g.detailHigh.detail.gut.terms.used.length) where.push('the intestinal wall');
+    g.detailHigh.detail.hepatic.forEach(function(x){ if (x.terms.used.length) where.push('the liver'); });
+    var site = where.length ? where.filter(function(v,i,a){ return a.indexOf(v)===i; }).join(' and ') : 'no modelled site';
+    if (g.kind === 'AMR'){
+      return 'Modelled effect on activation of ' + dn + ' at ' + site + ': the active metabolite is predicted at ' +
+        fmt(g.ratio,3) + ' times its usual exposure.';
+    }
+    if (g.direction === 'no meaningful change')
+      return 'The predicted change in ' + dn + ' exposure falls inside the guideline no-effect window of 0.8 to 1.25, so no interaction is flagged.';
+    if (g.direction === 'accumulation')
+      return 'Inhibition at ' + site + ' is predicted to raise ' + dn + ' exposure ' + fmt(g.ratio,3) +
+        '-fold' + (g.moiety.nti ? ', against a narrow therapeutic index threshold of ' + g.moiety.nti.threshold + '-fold' : '') + '.';
+    return 'Induction at ' + site + ' is predicted to cut ' + dn + ' exposure to ' + fmt(g.ratio,3) +
+      ' of its usual value, which is a loss-of-efficacy risk rather than a toxicity risk.';
+  }
+
+  function termRow(label, t, extra){
+    return '<tr><td>'+esc(label)+'</td>'+
+      '<td class="n">'+fmt(t.A,3)+'</td><td class="n">'+fmt(t.B,3)+'</td><td class="n">'+fmt(t.C,3)+'</td>'+
+      '<td class="n">'+fmt(t.product,3)+'</td><td class="n">'+extra+'</td></tr>';
+  }
+  function modelBlock(res){
+    var g = res.governing, h = '';
+    h += '<section class="blk"><h3>How the number was reached</h3>'+
+         '<p class="sh">Compartment terms at the concentration used for the reported ratio.</p>'+
+         '<div class="card"><div class="pad scroll"><table><thead><tr>'+
+         '<th>Compartment</th><th class="n">A reversible</th><th class="n">B inactivation</th><th class="n">C induction</th>'+
+         '<th class="n">A·B·C</th><th class="n">f'+'m'+' / F'+'g'+'</th></tr></thead><tbody>';
+    var det = (g.interval[1] === g.ratio || g.pointEstimate) ? g.detailHigh.detail : g.detailLow.detail;
+    if (det.gut) h += termRow(D.PROTEINS[det.gut.protein].symbol + ' intestinal', det.gut.terms, fmt(det.gut.fg,2));
+    det.hepatic.forEach(function(x){
+      h += termRow(D.PROTEINS[x.protein].symbol + ' hepatic' + (x.role==='activation'?' (activation)':''), x.terms, fmt(x.fm,2));
+    });
+    h += '</tbody></table>';
+    h += '<p class="sh" style="margin:12px 0 0">A below 1 means reversible inhibition, B below 1 means time-dependent inactivation, C above 1 means induction. '+
+         'Each bracket is weighted by how much of the drug’s clearance runs through that enzyme, which is why a high-fm drug moves further than a low-fm one at the same inhibition.</p>';
+    h += '</div></div></section>';
+    return h;
+  }
+
+  function contributionBlock(res){
+    var g = res.governing, rows = [];
+    var det = (g.interval[1] === g.ratio || g.pointEstimate) ? g.detailHigh.detail : g.detailLow.detail;
+    function collect(where, protId, used){
+      used.forEach(function(u){
+        rows.push({ where: where, prot: D.PROTEINS[protId].symbol, cid: u.cid, kind: u.kind,
+          I: u.I, paramName: u.paramName, param: u.param, ratio: u.ratio, system: u.system, src: u.src, pmid: u.pmid });
+      });
+    }
+    if (det.gut) collect('intestinal', det.gut.protein, det.gut.terms.used);
+    det.hepatic.forEach(function(x){ collect('hepatic', x.protein, x.terms.used); });
+    if (!rows.length) return '';
+    rows.sort(function(a,b){ return b.ratio - a.ratio; });
+
+    var h = '<section class="blk"><h3>Constituent contributions</h3>'+
+      '<p class="sh">Reversible terms are summed, not maximised — that is the correction that lets several weak inhibitors add up, and stops one trace compound carrying a whole species.</p>'+
+      '<div class="card"><div class="pad scroll"><table><thead><tr>'+
+      '<th>Constituent</th><th>Mechanism</th><th>Protein</th><th>Site</th>'+
+      '<th class="n">[I] µM</th><th class="n">parameter</th><th class="n">contribution</th><th>system</th><th>source</th>'+
+      '</tr></thead><tbody>';
+    rows.forEach(function(r){
+      h += '<tr><td>'+esc(D.CONSTITUENTS[r.cid].name)+'</td><td>'+esc(r.kind)+'</td><td>'+esc(r.prot)+'</td><td>'+esc(r.where)+'</td>'+
+        '<td class="n">'+fmt(r.I,3)+'</td>'+
+        '<td class="n">'+esc(r.paramName)+' '+fmt(r.param,3)+'</td>'+
+        '<td class="n">'+fmt(r.ratio,3)+'</td>'+
+        '<td>'+esc(r.system||'—')+'</td><td>'+srcCell(r)+'</td></tr>';
+    });
+    return h + '</tbody></table></div></div></section>';
+  }
+
+  function exposureBlock(res){
+    var ex = res.exposures || [];
+    if (!ex.length) return '';
+    var h = '<section class="blk"><h3>Exposure estimates</h3>'+
+      '<p class="sh">What is known about where each constituent actually reaches, which is what decides whether a prediction is possible.</p>'+
+      '<div class="card"><div class="pad scroll"><table><thead><tr>'+
+      '<th>Constituent</th><th class="n">% w/w</th><th class="n">[I] gut µM</th><th class="n">[I] hepatic unbound µM</th>'+
+      '<th>tier</th><th>why</th></tr></thead><tbody>';
+    ex.forEach(function(e){
+      var hep = e.hepatic ? (e.ihLow===e.ihHigh ? fmt(e.ihLow,3) : fmt(e.ihLow,2)+' – '+fmt(e.ihHigh,2)) : 'not evaluated';
+      h += '<tr><td>'+esc(e.name)+'</td><td class="n">'+fmt(e.link.pct,3)+'</td>'+
+        '<td class="n">'+fmt(e.igut,3)+'</td><td class="n">'+hep+'</td>'+
+        '<td>'+esc(e.tier)+'</td><td style="max-width:32ch">'+esc(e.reason)+'</td></tr>';
+    });
+    return h + '</tbody></table></div></div></section>';
+  }
+
+  function transporterBlock(res){
+    var h = '<section class="blk"><h3>Transporter co-signals</h3>'+
+      '<p class="sh">Reported, never folded into the ratio. In vitro efflux and uptake inhibition is a weak predictor of clinical exposure change, so the magnitude is left unmodelled rather than guessed.</p>'+
+      '<div class="card"><div class="pad scroll"><table><thead><tr>'+
+      '<th>Transporter</th><th>Constituent</th><th class="n">R1</th><th>system</th><th>source</th></tr></thead><tbody>';
+    res.transporterSignals.forEach(function(t){
+      h += '<tr><td>'+esc(t.symbol)+'</td><td>'+esc(t.name)+'</td><td class="n">'+fmt(t.r1,3)+'</td>'+
+        '<td>'+esc(t.system||'—')+'</td><td>'+srcTag(t.src)+'</td></tr>';
+    });
+    return h + '</tbody></table></div></div></section>';
+  }
+
+  function missingBlock(res){
+    var rs = res.provisionalReasons || [];
+    var LABEL = {
+      kinetics:'Inhibition constant not yet sourced',
+      exposure:'Pharmacokinetics are a placeholder',
+      'exposure-missing':'No human pharmacokinetics exist on file',
+      abundance:'Abundance in this preparation not sourced',
+      dose:'Typical dose not sourced'
+    };
+    if (!rs.length) return '<section class="blk"><h3>Data provenance</h3>'+
+      '<p class="sh">Every parameter behind this result is sourced.</p>'+
+      '<div class="card"><div class="pad"><p style="margin:0;color:var(--ink-2);font-size:13.5px">'+
+      'Nothing on this pathway is still a placeholder.</p></div></div></section>';
+    var h = '<section class="blk"><h3>What is still missing</h3>'+
+      '<p class="sh">The result is marked provisional because of these specific gaps. Fill them and the flag clears by itself.</p>'+
+      '<div class="card"><div class="pad scroll"><table><thead><tr><th>Gap</th><th>What to find</th></tr></thead><tbody>';
+    var seen = {};
+    rs.forEach(function(r){
+      var k = r.kind+'|'+r.what;
+      if (seen[k]) return; seen[k] = 1;
+      h += '<tr><td>'+esc(LABEL[r.kind]||r.kind)+'</td><td>'+esc(r.what)+'</td></tr>';
+    });
+    return h + '</tbody></table></div></div></section>';
+  }
+
+  function gateBlock(res){
+    var ex = res.gated ? res.gated.excluded : [];
+    var admitted = res.gated ? res.gated.admitted.length : 0;
+    var h = '<section class="blk"><h3>Abundance gate</h3>'+
+      '<p class="sh">'+admitted+' constituent'+(admitted===1?'':'s')+' admitted to the arithmetic, '+ex.length+' held back.</p>'+
+      '<div class="card"><div class="pad">';
+    if (!ex.length) h += '<p style="margin:0;color:var(--ink-2);font-size:13.5px">Every constituent on file for this preparation carries a quantified abundance or is a pharmacopoeial marker, so none was excluded.</p>';
+    else {
+      h += '<table><thead><tr><th>Held back</th><th>Reason</th></tr></thead><tbody>';
+      ex.forEach(function(e){ h += '<tr><td>'+esc(e.c.name)+'</td><td>'+esc(e.reason)+'</td></tr>'; });
+      h += '</tbody></table>';
+    }
+    return h + '</div></div></section>';
+  }
+
+  function auditBlock(res){
+    return '<details><summary>Audit record — the parameters that reproduce this result</summary>'+
+      '<div class="inner"><button class="copy">Copy audit record</button>'+
+      '<pre>'+esc(JSON.stringify(res.audit, null, 2))+'</pre></div></details>';
+  }
+
+  // ---------- dataset tab
+  function buildDataset(){
+    var h = '';
+    h += '<div class="card"><div class="pad"><h2>Preparations</h2><p class="hint">The query entity. Plant part and extract type are part of the identity.</p><div class="scroll"><table><thead><tr>'+
+      '<th>Species</th><th>Common</th><th>Part</th><th>Preparation</th><th class="n">Dose mg/day</th><th>Constituents (% w/w)</th></tr></thead><tbody>';
+    D.PREPARATIONS.forEach(function(p){
+      h += '<tr><td><i>'+esc(p.species)+'</i></td><td>'+esc(p.common)+'<br><span style="color:var(--ink-3);font-size:11.5px">'+esc(p.vernacular)+'</span></td>'+
+        '<td>'+esc(p.part)+'</td><td>'+esc(p.prep)+'</td><td class="n">'+p.dose+' '+srcTag(p.doseSrc)+'</td><td>'+
+        p.constituents.map(function(c){ return esc(D.CONSTITUENTS[c.cid].name)+' '+c.pct+'% '+srcTag(c.src); }).join('<br>')+'</td></tr>';
+    });
+    h += '</tbody></table></div></div></div>';
+
+    h += '<div class="card"><div class="pad"><h2>Drugs and clearance</h2><p class="hint">f'+'m'+' is the fraction of systemic clearance through that enzyme; F'+'g'+' is the fraction escaping gut metabolism. Both were absent from v1 and both change the answer.</p><div class="scroll"><table><thead><tr>'+
+      '<th>Drug</th><th>Moiety</th><th class="n">F'+'g'+'</th><th>Clearance (f'+'m'+')</th><th>Transporters</th><th>NTI</th></tr></thead><tbody>';
+    D.DRUGS.forEach(function(d){
+      d.moieties.forEach(function(m, i){
+        var cl = (m.clearance||[]).map(function(c){ return D.PROTEINS[c.protein].symbol+' '+c.fm; })
+          .concat((m.activation||[]).map(function(a){ return D.PROTEINS[a.protein].symbol+' '+a.fAct+' (activation)'; }));
+        h += '<tr><td>'+(i===0?esc(d.inn):'')+'</td><td>'+esc(m.name)+'</td><td class="n">'+m.fg+'</td>'+
+          '<td>'+(cl.length?cl.join('<br>'):'<span style="color:var(--ink-3)">none in panel</span>')+'</td>'+
+          '<td>'+((m.transporters||[]).map(function(t){ return D.PROTEINS[t].symbol; }).join(', ')||'—')+'</td>'+
+          '<td>'+(m.nti ? esc(m.nti.grade)+', '+m.nti.threshold+'×' : '—')+'</td></tr>';
+      });
+    });
+    h += '</tbody></table></div></div></div>';
+
+    h += '<div class="card"><div class="pad"><h2>Protein panel</h2><p class="hint">The FDA 2020 and ICH M12 in vitro evaluation panel, restricted to targets with natural-product data. CYP3A4 is split by organ, which matters more than adding a seventh enzyme.</p><div class="scroll"><table><thead><tr>'+
+      '<th>Protein</th><th>Organ</th><th>Kind</th><th class="n">kdeg h⁻¹</th><th>source</th></tr></thead><tbody>';
+    Object.keys(D.PROTEINS).forEach(function(k){ var p = D.PROTEINS[k];
+      h += '<tr><td>'+esc(p.symbol)+'</td><td>'+esc(p.organ)+'</td><td>'+esc(p.kind)+(p.note?' — '+esc(p.note):'')+'</td>'+
+        '<td class="n">'+(p.kdeg||'—')+'</td><td>'+(p.kdegSrc?srcTag(p.kdegSrc):'—')+'</td></tr>'; });
+    h += '</tbody></table></div></div></div>';
+
+    h += '<div class="card"><div class="pad"><h2>Constituent pharmacokinetics</h2><p class="hint">This table is the bottleneck of the whole field. A missing row is why a prediction lands at tier C or D, and most rows are missing.</p><div class="scroll"><table><thead><tr>'+
+      '<th>Constituent</th><th class="n">MW</th><th class="n">Cmax µM</th><th class="n">fu</th><th class="n">Fa·F'+'g'+'</th><th>tier reachable</th><th>source</th></tr></thead><tbody>';
+    Object.keys(D.CONSTITUENTS).forEach(function(k){ var c = D.CONSTITUENTS[k];
+      var tier = !c.pk ? 'C' : (typeof c.pk.faFg === 'number' ? 'A' : 'B');
+      h += '<tr><td>'+esc(c.name)+'</td><td class="n">'+c.mw+'</td>'+
+        '<td class="n">'+(c.pk?c.pk.cmax:'—')+'</td><td class="n">'+(c.pk?c.pk.fu:'—')+'</td>'+
+        '<td class="n">'+(c.pk&&typeof c.pk.faFg==='number'?c.pk.faFg:'—')+'</td>'+
+        '<td>'+tier+'</td><td>'+(c.pk?srcTag(c.pk.src):'<span style="color:var(--ink-3)">no data</span>')+'</td></tr>'; });
+    h += '</tbody></table></div></div></div>';
+
+    h += '<div class="card"><div class="pad"><h2>Bioactivity records</h2><p class="hint">Three typed tables, because reversible inhibition, time-dependent inactivation and induction need different parameters and behave differently.</p><div class="scroll"><table><thead><tr>'+
+      '<th>Type</th><th>Constituent</th><th>Protein</th><th class="n">parameters</th><th>probe / readout</th><th>system</th><th>source</th></tr></thead><tbody>';
+    D.REVERSIBLE.forEach(function(r){
+      h += '<tr><td>reversible</td><td>'+esc(D.CONSTITUENTS[r.cid].name)+'</td><td>'+esc(D.PROTEINS[r.protein].symbol)+' '+esc(D.PROTEINS[r.protein].organ.slice(0,3))+'</td>'+
+        '<td class="n">Ki '+r.ki+' µM</td><td>'+esc(r.probe)+'</td><td>'+esc(r.system)+'</td><td>'+srcTag(r.src)+'</td></tr>'; });
+    D.TDI.forEach(function(r){
+      h += '<tr><td>time-dependent</td><td>'+esc(D.CONSTITUENTS[r.cid].name)+'</td><td>'+esc(D.PROTEINS[r.protein].symbol)+' '+esc(D.PROTEINS[r.protein].organ.slice(0,3))+'</td>'+
+        '<td class="n">KI '+r.KI+' µM, kinact '+r.kinact+'/min</td><td>—</td><td>'+esc(r.system)+'</td><td>'+srcTag(r.src)+'</td></tr>'; });
+    D.INDUCTION.forEach(function(r){
+      h += '<tr><td>induction</td><td>'+esc(D.CONSTITUENTS[r.cid].name)+'</td><td>'+esc(D.PROTEINS[r.protein].symbol)+' '+esc(D.PROTEINS[r.protein].organ.slice(0,3))+'</td>'+
+        '<td class="n">Emax '+r.emax+'×, EC50 '+r.ec50+' µM</td><td>'+esc(r.readout)+'</td><td>'+esc(r.system)+'</td><td>'+srcTag(r.src)+'</td></tr>'; });
+    h += '</tbody></table></div></div></div>';
+
+    h += '<div class="card"><div class="pad"><h2>Human crossover studies</h2>'+
+      '<p class="hint">Deliberately empty. HIGH confidence needs every contributing parameter to be sourced, and fu is still uncited for every constituent, so HIGH is not reached yet. Clinical studies here do not raise confidence: they were seen during development, so they cannot also confirm the predictions. Growing an independent hard-negative stratum is the highest-value work left on the project.</p>'+
+      '<p style="margin:0;color:var(--ink-2);font-size:13.5px">0 studies on file.</p></div></div>';
+
+    $('ds').innerHTML = h;
+  }
+
+  // ---------- tabs
+  var views = { predict:['t-predict','v-predict'], data:['t-data','v-data'], method:['t-method','v-method'] };
+  function show(name){
+    Object.keys(views).forEach(function(k){
+      var sel = k === name;
+      $(views[k][0]).setAttribute('aria-selected', sel ? 'true':'false');
+      $(views[k][1]).classList.toggle('hidden', !sel);
+    });
+    if (name !== 'predict' && location.hash !== '#'+name) location.hash = name;
+    if (name === 'predict' && location.hash) location.hash = '';
+  }
+  Object.keys(views).forEach(function(k){ $(views[k][0]).addEventListener('click', function(){ show(k); }); });
+  window.addEventListener('hashchange', function(){
+    var n = location.hash.replace('#','');
+    show(views[n] ? n : 'predict');
+  });
+
+  // ---------- upstream snapshot (written by ingest/, absent until a refresh runs)
+  var UPSTREAM = { snapshot:null, imppat:null };
+
+  function loadJSON(path){
+    return fetch(path, { cache:'no-store' })
+      .then(function(r){ return r.ok ? r.json() : null; })
+      .catch(function(){ return null; });
+  }
+
+  function renderUpstream(){
+    var snap = UPSTREAM.snapshot, idx = UPSTREAM.imppat, h = '';
+    h += '<div class="card"><div class="pad"><h2>Upstream data</h2>';
+    if (!snap && !idx){
+      h += '<p class="hint">No upstream snapshot in this build.</p>'+
+        '<p style="margin:0;color:var(--ink-2);font-size:13.5px">Composition and drug classifications are refreshed by <code>ingest/fetch_sources.py</code> and <code>ingest/build_data.py</code>, which run monthly in CI. Until that workflow has run, the app uses only the curated dataset below. Neither upstream source supplies kinetic parameters, so a refresh widens coverage rather than changing any prediction.</p>';
+      return h + '</div></div>';
+    }
+    if (snap){
+      h += '<p class="hint">Fetched '+esc(snap.retrieved_utc||'—')+'. Every file is checksummed so a build can be reproduced.</p>';
+      h += '<div class="scroll"><table><thead><tr><th>Source</th><th>Licence</th><th>File</th><th class="n">bytes</th><th class="n">sha256</th></tr></thead><tbody>';
+      (snap.sources||[]).forEach(function(src){
+        var files = src.files ? Object.keys(src.files) : [];
+        if (!files.length){
+          h += '<tr><td>'+esc(src.name)+'</td><td>'+esc(src.licence)+'</td><td colspan="3" style="color:var(--ink-3)">page scrape</td></tr>';
+        } else files.forEach(function(f, i){
+          var v = src.files[f];
+          h += '<tr><td>'+(i===0?esc(src.name):'')+'</td><td>'+(i===0?esc(src.licence):'')+'</td>'+
+            '<td>'+esc(f)+'</td><td class="n">'+v.bytes.toLocaleString()+'</td><td class="n">'+esc(v.sha256)+'…</td></tr>';
+        });
+      });
+      h += '</tbody></table></div>';
+      if (snap.note) h += '<p class="sh" style="margin:12px 0 0">'+esc(snap.note)+'</p>';
+    }
+    h += '</div></div>';
+
+    if (idx){
+      var st = idx.stats || {};
+      h += '<div class="card"><div class="pad"><h2>Upstream coverage</h2>'+
+        '<p class="hint">'+(st.plants||0).toLocaleString()+' plants and '+(st.association_rows||0).toLocaleString()+
+        ' plant–part–phytochemical associations in the current IMPPAT release. '+(st.matched_to_kinetics||0).toLocaleString()+
+        ' of those associations involve a constituent this repository holds kinetics for.</p>';
+
+      // curation leads: IMPPAT says the constituent is there, but no preparation exists yet
+      var have = {};
+      D.PREPARATIONS.forEach(function(p){
+        p.constituents.forEach(function(c){ have[norm(p.species)+'|'+c.cid] = true; });
+      });
+      var leads = {};
+      (idx.associations||[]).forEach(function(a){
+        var key = norm(a.species)+'|'+a.cid;
+        if (have[key]) return;
+        var k = a.species+'|'+a.cid;
+        if (!leads[k]) leads[k] = { species:a.species, cid:a.cid, parts:{} };
+        if (a.part) leads[k].parts[a.part] = true;
+      });
+      var rows = Object.keys(leads).map(function(k){ return leads[k]; });
+      if (rows.length){
+        h += '<p class="sh" style="margin-top:14px"><b>Curation leads.</b> IMPPAT records these constituents in these plant parts, and this repository already holds kinetics for the constituent, but no preparation has been built. Each needs an abundance value and a typical dose before it can be scored.</p>';
+        h += '<div class="scroll"><table><thead><tr><th>Species</th><th>Plant part</th><th>Constituent</th></tr></thead><tbody>';
+        rows.slice(0,40).forEach(function(r){
+          h += '<tr><td><i>'+esc(r.species)+'</i></td><td>'+esc(Object.keys(r.parts).join(', ')||'—')+'</td>'+
+            '<td>'+esc((D.CONSTITUENTS[r.cid]||{}).name||r.cid)+'</td></tr>';
+        });
+        h += '</tbody></table></div>';
+        if (rows.length > 40) h += '<p class="sh" style="margin:10px 0 0">'+(rows.length-40)+' further leads not shown.</p>';
+      } else {
+        h += '<p style="margin:0;color:var(--ink-2);font-size:13.5px">Every IMPPAT association involving a constituent we hold kinetics for already has a preparation built.</p>';
+      }
+      h += '</div></div>';
+    }
+    return h;
+  }
+
+  function norm(x){ return String(x||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim(); }
+
+  // ---------- boot
+  selPrep.value = 'turmeric-std'; syncPrepMeta();
+  selDrug.value = 'tacrolimus';  syncDrugMeta();
+  buildDataset();
+  run();
+  $('upstream').innerHTML = renderUpstream();
+  Promise.all([loadJSON('snapshot_public.json'), loadJSON('imppat_index.json')]).then(function(r){
+    UPSTREAM.snapshot = r[0]; UPSTREAM.imppat = r[1];
+    $('upstream').innerHTML = renderUpstream();
+    if (r[0] && r[0].retrieved_utc)
+      $('chip-data').textContent = 'data ' + D.version + ' · upstream ' + r[0].retrieved_utc.slice(0,10);
+  });
+  var start = location.hash.replace('#','');
+  show(views[start] ? start : 'predict');
+})();
+</script>
+</body>
+</html>
